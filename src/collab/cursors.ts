@@ -31,6 +31,10 @@ export class Cursors {
     this.redraw()
   }
 
+  list(): Presence[] {
+    return [...this.presences.values()].map((p) => p.presence)
+  }
+
   remove(clientId: string): void {
     if (this.presences.delete(clientId)) this.redraw()
   }

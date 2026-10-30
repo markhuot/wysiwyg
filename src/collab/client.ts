@@ -652,6 +652,14 @@ export class Collab extends EventTarget {
     this.post({ v: PROTOCOL, type: 'presence', ...presence })
   }
 
+  /** Other clients' cursors, mapped to this document. The overlay draws these. */
+  remoteCursors(): (Presence & { from: Pos; to: Pos })[] {
+    return (this.cursors?.list() ?? []).flatMap((p) => {
+      const at = this.resolvePresence(p)
+      return at ? [{ ...p, from: at.anchor, to: at.head }] : []
+    })
+  }
+
   /** A remote cursor at its version, mapped to the document as it is here. Null until we've caught up to it. */
   private resolvePresence(p: Presence): { anchor: Pos; head: Pos } | null {
     if (!this.index) return null

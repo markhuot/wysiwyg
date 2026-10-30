@@ -96,19 +96,18 @@ type Idle = (cb: (deadline: { timeRemaining(): number }) => void) => number
  */
 export class IdleBuild {
   private readonly sizes: number[] = []
-  private next: Element | null
+  /** The next block to measure; undefined until the first slice, so constructing reads nothing. */
+  private next: Element | null | undefined
   private handle: number | ReturnType<typeof setTimeout> | null = null
   private result: SizeIndex | null = null
   /** Slices run so far and the longest one, for the performance check. */
   readonly stats = { slices: 0, longest: 0 }
 
   constructor(
-    root: Element,
+    private readonly root: Element,
     private readonly onDone: (index: SizeIndex) => void = () => {},
     private readonly sliceMs = 8,
-  ) {
-    this.next = root.firstElementChild
-  }
+  ) {}
 
   get done(): boolean {
     return !!this.result
@@ -129,6 +128,7 @@ export class IdleBuild {
 
   finish(): SizeIndex {
     this.cancel()
+    if (this.next === undefined) this.next = this.root.firstElementChild
     while (this.next) this.measure()
     return this.complete()
   }
@@ -147,6 +147,7 @@ export class IdleBuild {
   private slice(more: () => boolean): void {
     this.handle = null
     const start = performance.now()
+    if (this.next === undefined) this.next = this.root.firstElementChild
     do {
       for (let i = 0; i < 64 && this.next; i++) this.measure()
     } while (this.next && more())
