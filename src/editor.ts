@@ -6,7 +6,7 @@ import { repairBlock } from './commands/repairBlock'
 import type { Ctx } from './commands/replaceRange'
 import { splitBlock } from './commands/splitBlock'
 import { pendingAt, toggleMark, togglePending, type PendingMarks } from './commands/toggleMark'
-import { getSelectionFor, ordered, pointToPos, posToPoint, selectPoints, type Pos } from './dom'
+import { blockOf, getSelectionFor, offsetInBlock, ordered, pointToPos, posToPoint, selectPoints, type Pos } from './dom'
 import { History } from './history'
 import { defaultSchema, validate, validateBlock, type Schema } from './schema'
 
@@ -20,6 +20,20 @@ export interface Editor {
   readonly schema: Schema
   getHTML(): string
   destroy(): void
+}
+
+/**
+ * How the multiplayer binding sees local edits. Every command runs between
+ * `begin` and `end`, which name the blocks it may change, so the binding can
+ * turn the change into a step. Without a binding none of this runs.
+ */
+export interface EditHook {
+  /** Before a change to the blocks from `from.block` to `to.block`. `mark` is set for a mark toggle. */
+  begin(from: Pos, to: Pos, info?: { mark?: string; composing?: boolean }): void
+  /** After the change. */
+  end(): void
+  undo(): void
+  redo(): void
 }
 
 /** Input types the browser runs itself. Chrome doesn't let a page cancel composition. */
@@ -67,14 +81,52 @@ function editorFor(e: Event): EditorImpl | undefined {
 }
 const onBeforeInput = (e: Event) => editorFor(e)?.beforeInput(e as InputEvent)
 const onKeyDown = (e: Event) => editorFor(e)?.keyDown(e as KeyboardEvent)
+const onCompositionStart = (e: Event) => editorFor(e)?.compositionStart()
 const onCompositionEnd = (e: Event) => editorFor(e)?.compositionEnd()
+
+/**
+ * The editors inside a form that fired `formdata` or `reset`. Editing roots
+ * are plain elements, so the form doesn't know them: they're found when the
+ * event fires, never ahead of time.
+ */
+function editorsIn(form: EventTarget | null, selector: string): EditorImpl[] {
+  if (!form || !(form as Element).querySelectorAll) return []
+  const out: EditorImpl[] = []
+  for (const el of (form as Element).querySelectorAll(selector)) {
+    const editor = editors.get(el)
+    if (editor) out.push(editor)
+  }
+  return out
+}
+
+// Both a submit and `new FormData(form)` fire `formdata`, so the editor posts like a <textarea>.
+const onFormData = (e: Event) => {
+  for (const editor of editorsIn(e.target, '[name]')) {
+    const name = editor.root.getAttribute('name')
+    if (name) (e as FormDataEvent).formData.append(name, editor.getHTML())
+  }
+}
+const onReset = (e: Event) => {
+  for (const editor of editorsIn(e.target, '[contenteditable]')) editor.reset()
+}
 
 function listen(doc: Document, on: boolean): void {
   const method = on ? 'addEventListener' : 'removeEventListener'
   // Capture phase, so an app's stopPropagation can't starve the editor.
   doc[method]('beforeinput', onBeforeInput, true)
   doc[method]('keydown', onKeyDown, true)
+  doc[method]('compositionstart', onCompositionStart, true)
   doc[method]('compositionend', onCompositionEnd, true)
+  doc[method]('formdata', onFormData, true)
+  doc[method]('reset', onReset, true)
+}
+
+/** Attaches the multiplayer binding's hook. Internal to the multiplayer entry point. */
+export function attachHook(editor: Editor, hook: EditHook | null): EditorImpl {
+  const impl = editors.get(editor.root)
+  if (impl !== editor) throw new Error('wysiwyg: the editor was destroyed')
+  impl.hook = hook
+  return impl
 }
 
 interface SelectedRange {
@@ -83,11 +135,12 @@ interface SelectedRange {
   collapsed: boolean
 }
 
-class EditorImpl implements Editor {
+export class EditorImpl implements Editor {
   private readonly history: History
-  private readonly ctx: Ctx
-  private pending: PendingMarks | null = null
-  private composing = false
+  readonly ctx: Ctx
+  pending: PendingMarks | null = null
+  composing = false
+  hook: EditHook | null = null
 
   constructor(
     readonly root: HTMLElement,
@@ -102,6 +155,13 @@ class EditorImpl implements Editor {
     return this.root.innerHTML
   }
 
+  /** A form reset. The multiplayer document is shared, so a bound editor keeps it. */
+  reset(): void {
+    if (this.hook) return
+    this.pending = null
+    this.history.reset()
+  }
+
   destroy(): void {
     if (editors.get(this.root) !== this) return
     editors.delete(this.root)
@@ -114,11 +174,7 @@ class EditorImpl implements Editor {
   beforeInput(e: InputEvent): void {
     const type = e.inputType
     if (COMPOSITION.has(type) || e.isComposing) {
-      if (!this.composing) {
-        this.composing = true
-        this.pending = null
-        this.history.record()
-      }
+      this.compositionStart()
       return
     }
     if (!e.cancelable) return
@@ -178,9 +234,28 @@ class EditorImpl implements Editor {
     }
   }
 
-  /** Composition ran natively, so check the caret's block, and only that block, against the schema. */
+  /** Composition runs natively. Engines that skip `compositionstart` get here from `beforeinput`. */
+  compositionStart(): void {
+    if (this.composing) return
+    this.composing = true
+    this.pending = null
+    this.record()
+    if (this.hook) {
+      const range = this.selection()
+      if (range) this.hook.begin(range.from, range.to, { composing: true })
+    }
+  }
+
   compositionEnd(): void {
+    const began = this.composing
     this.composing = false
+    this.repairComposed()
+    if (began) this.hook?.end()
+    this.check()
+  }
+
+  /** Composition ran natively, so check the caret's block, and only that block, against the schema. */
+  private repairComposed(): void {
     const sel = getSelectionFor(this.root)
     const anchor = sel?.anchorNode
     if (!sel || !anchor || !this.root.contains(anchor)) return
@@ -190,10 +265,9 @@ class EditorImpl implements Editor {
     if (node.nodeType === 1 && !validateBlock(node as Element, this.schema).length) return
     const pos = repairBlock(this.ctx, node, { node: anchor, offset: sel.anchorOffset })
     if (pos) this.place(pos)
-    this.check()
   }
 
-  private selection(): SelectedRange | null {
+  selection(): SelectedRange | null {
     const sel = getSelectionFor(this.root)
     return sel?.rangeCount ? this.toRange(sel.getRangeAt(0)) : null
   }
@@ -212,16 +286,28 @@ class EditorImpl implements Editor {
     return range ? this.toRange(range) : null
   }
 
-  private place(from: Pos, to: Pos = from): void {
+  place(from: Pos, to: Pos = from): void {
     selectPoints(this.root, posToPoint(from), posToPoint(to))
   }
 
   private apply(command: (from: Pos, to: Pos) => Pos, range = this.selection()): void {
     if (!range) return
-    this.history.record()
+    this.record()
     this.pending = null
-    this.place(command(range.from, range.to))
+    this.hook?.begin(range.from, range.to)
+    const caret = command(range.from, range.to)
+    this.hook?.end()
+    this.place(caret)
     this.check()
+  }
+
+  /** Snapshot history is for single-player. A bound editor undoes through its steps. */
+  private record(typingKey?: string): void {
+    if (!this.hook) this.history.record(typingKey)
+  }
+
+  private typed(): void {
+    if (!this.hook) this.history.typed(this.history.caretKey())
   }
 
   private type(text: string): void {
@@ -233,10 +319,17 @@ class EditorImpl implements Editor {
     // marks the new text takes. One insertData, no block rewrite.
     if (!this.pending && sel?.isCollapsed && node?.nodeType === 3 && sel.anchorOffset > 0 && this.root.contains(node)) {
       const offset = sel.anchorOffset
-      this.history.record(this.history.caretKey())
+      if (this.hook) {
+        const block = blockOf(this.root, node)!
+        const pos = { block, offset: offsetInBlock(block, node, offset) }
+        this.hook.begin(pos, pos)
+      } else {
+        this.history.record(this.history.caretKey())
+      }
       ;(node as Text).insertData(offset, text)
+      this.hook?.end()
       selectPoints(this.root, { node, offset: offset + text.length })
-      this.history.typed(this.history.caretKey())
+      this.typed()
       this.check()
       return
     }
@@ -244,10 +337,13 @@ class EditorImpl implements Editor {
     const range = this.selection()
     if (!range) return
     const marks = range.collapsed ? pendingAt(this.pending, range.from) : undefined
-    this.history.record(range.collapsed ? this.history.caretKey() : undefined)
+    this.record(range.collapsed ? this.history.caretKey() : undefined)
     this.pending = null
-    this.place(insertText(this.ctx, range.from, range.to, text, marks))
-    this.history.typed(this.history.caretKey())
+    this.hook?.begin(range.from, range.to)
+    const caret = insertText(this.ctx, range.from, range.to, text, marks)
+    this.hook?.end()
+    this.place(caret)
+    this.typed()
     this.check()
   }
 
@@ -287,21 +383,25 @@ class EditorImpl implements Editor {
       this.pending = togglePending(this.ctx, this.pending, range.from, mark)
       return
     }
-    this.history.record()
+    this.record()
     this.pending = null
+    this.hook?.begin(range.from, range.to, { mark })
     toggleMark(this.ctx, range.from, range.to, mark)
+    this.hook?.end()
     this.place(range.from, range.to)
     this.check()
   }
 
   private undo(): void {
     this.pending = null
-    this.history.undo()
+    if (this.hook) this.hook.undo()
+    else this.history.undo()
   }
 
   private redo(): void {
     this.pending = null
-    this.history.redo()
+    if (this.hook) this.hook.redo()
+    else this.history.redo()
   }
 
   private check(): void {

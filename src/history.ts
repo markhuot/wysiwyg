@@ -16,6 +16,8 @@ export const MERGE_MS = 1000
 export class History {
   private done: Snapshot[] = []
   private undone: Snapshot[] = []
+  /** The snapshot before the first change: the starting HTML. Kept apart so the limit never evicts it. */
+  private first: Snapshot | undefined
   private typingKey: string | undefined
   private typingTime = 0
 
@@ -31,7 +33,9 @@ export class History {
    */
   record(typingKey?: string): void {
     if (typingKey !== undefined && typingKey === this.typingKey && Date.now() - this.typingTime < MERGE_MS) return
-    this.done.push(this.snapshot())
+    const snapshot = this.snapshot()
+    this.first ??= snapshot
+    this.done.push(snapshot)
     if (this.done.length > this.limit) this.done.shift()
     this.undone = []
     this.typingKey = undefined
@@ -49,6 +53,20 @@ export class History {
 
   redo(): boolean {
     return this.move(this.undone, this.done)
+  }
+
+  /**
+   * Restores the starting HTML, like a form reset restores a `<textarea>`, and
+   * clears undo and redo. With no change recorded the HTML is already the
+   * starting HTML, so there's nothing to do.
+   */
+  reset(): void {
+    if (!this.first) return
+    this.root.innerHTML = this.first.html
+    this.first = undefined
+    this.done = []
+    this.undone = []
+    this.typingKey = undefined
   }
 
   /** Encodes the caret for `record`/`typed`. */

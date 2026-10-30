@@ -4,6 +4,8 @@ import { defaultSchema } from '../../src/schema'
 
 const live: Editor[] = []
 
+const LISTENERS = ['beforeinput', 'keydown', 'compositionstart', 'compositionend', 'formdata', 'reset']
+
 function mount(html: string): HTMLElement {
   const el = document.createElement('div')
   el.setAttribute('contenteditable', 'true')
@@ -69,12 +71,12 @@ describe('createEditor', () => {
     try {
       const a = createEditor(mount('<p>a</p>'))
       const b = createEditor(mount('<p>b</p>'))
-      expect(add.mock.calls.map((c) => c[0])).toEqual(['beforeinput', 'keydown', 'compositionend'])
+      expect(add.mock.calls.map((c) => c[0])).toEqual(LISTENERS)
       a.destroy()
       a.destroy()
       expect(remove).not.toHaveBeenCalled()
       b.destroy()
-      expect(remove.mock.calls.map((c) => c[0])).toEqual(['beforeinput', 'keydown', 'compositionend'])
+      expect(remove.mock.calls.map((c) => c[0])).toEqual(LISTENERS)
     } finally {
       add.mockRestore()
       remove.mockRestore()
@@ -86,5 +88,31 @@ describe('createEditor', () => {
     const editor = createEditor(el)
     live.push(editor)
     expect(editor.getHTML()).toBe('<p>a<em>b</em></p>')
+  })
+
+  test('a form reset restores the starting HTML and clears undo', () => {
+    const form = document.createElement('form')
+    document.body.append(form)
+    const el = mount('<p>ab</p>')
+    form.append(el)
+    live.push(createEditor(el))
+    document.getSelection()!.collapse(el.firstChild!.firstChild!, 1)
+    edit(el, 'insertParagraph')
+    expect(el.innerHTML).toBe('<p>a</p><p>b</p>')
+    form.reset()
+    expect(el.innerHTML).toBe('<p>ab</p>')
+    edit(el, 'historyUndo')
+    expect(el.innerHTML).toBe('<p>ab</p>')
+  })
+
+  test('a reset leaves editors outside the form alone', () => {
+    const form = document.createElement('form')
+    document.body.append(form)
+    const el = mount('<p>ab</p>')
+    live.push(createEditor(el))
+    document.getSelection()!.collapse(el.firstChild!.firstChild!, 1)
+    edit(el, 'insertParagraph')
+    form.reset()
+    expect(el.innerHTML).toBe('<p>a</p><p>b</p>')
   })
 })

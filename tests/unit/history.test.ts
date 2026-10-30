@@ -66,4 +66,35 @@ describe('History', () => {
     history.record()
     expect(history.redo()).toBe(false)
   })
+
+  test('reset restores the starting HTML even after the limit evicts old entries', () => {
+    const root = document.createElement('div')
+    root.innerHTML = '<p>start</p>'
+    const history = new History(root, 3)
+    for (let i = 0; i < 10; i++) {
+      history.record()
+      root.innerHTML = `<p>${i}</p>`
+    }
+    history.reset()
+    expect(root.innerHTML).toBe('<p>start</p>')
+    expect(history.undo()).toBe(false)
+  })
+
+  test('reset with nothing recorded changes nothing', () => {
+    const { root, history } = setup()
+    root.innerHTML = '<p>set by the app</p>'
+    history.reset()
+    expect(root.innerHTML).toBe('<p>set by the app</p>')
+  })
+
+  test('after a reset the next change records the restored HTML as the start', () => {
+    const { root, history } = setup()
+    history.record()
+    root.innerHTML = '<p>b</p>'
+    history.reset()
+    history.record()
+    root.innerHTML = '<p>c</p>'
+    history.reset()
+    expect(root.innerHTML).toBe('<p>a</p>')
+  })
 })
