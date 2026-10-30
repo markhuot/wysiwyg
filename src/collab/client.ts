@@ -292,7 +292,7 @@ export class Collab extends EventTarget {
       for (let b = this.root.children[cap.first] ?? null; b && blocks.length < cap.blocks + changed; b = b.nextElementSibling) blocks.push(b)
       const tokens = readTokens(blocks, this.editor.schema)
       const steps = cap.mark ? markSteps(cap) : diffSteps(cap, tokens)
-      if (!cap.mark) this.index!.splice(cap.first, cap.blocks, blocks.map((_, i) => blockTokensSize(tokens, i)))
+      if (!cap.mark) this.index!.splice(cap.first, cap.blocks, topSizes(tokens))
       if (steps.length) this.local(steps, 'edit')
     }
     if (wasComposing && this.held.length) {
@@ -735,19 +735,17 @@ function units(tokens: readonly Token[]): string[] {
   return out
 }
 
-/** The size of the `i`th top-level node in a token list. */
-function blockTokensSize(tokens: readonly Token[], i: number): number {
+/** The size of each top-level node in a token list. */
+function topSizes(tokens: readonly Token[]): number[] {
+  const out: number[] = []
   let depth = 0
-  let n = -1
-  let size = 0
   for (const t of tokens) {
-    if (depth === 0 && t.kind === 'open') n++
-    if (n === i) size += t.kind === 'text' ? t.text.length : 1
+    if (depth === 0) out.push(0)
+    out[out.length - 1]! += t.kind === 'text' ? t.text.length : 1
     if (t.kind === 'open') depth++
     else if (t.kind === 'close') depth--
-    if (n > i) break
   }
-  return size
+  return out
 }
 
 /**

@@ -104,16 +104,28 @@ const fixture = {
       other.receive({ v: 1, type: 'steps', version, steps: [new ReplaceStep(20, 20, [{ kind: 'text', text: 'r', marks: [] }]).toJSON()], clientId: 'other' })
       return performance.now() - t
     }
-    const step = keystroke()
-    await tick()
-    const apply = remote(server.authority('default').version)
-    // Hold our next keystroke on the wire so the remote step has to rebase it.
-    hold.on = true
-    keystroke()
-    const rebase = remote(server.authority('default').version)
-    hold.on = false
-    for (const send of hold.held.splice(0)) send()
-    await tick()
+    // Medians of several runs, so one GC pause or a busy machine doesn't decide the result.
+    const median = (xs: number[]) => xs.sort((x, y) => x - y)[xs.length >> 1]!
+    const steps: number[] = []
+    const applies: number[] = []
+    const rebases: number[] = []
+    for (let i = 0; i < 7; i++) {
+      steps.push(keystroke())
+      await tick()
+      applies.push(remote(server.authority('default').version))
+      // Hold our next keystroke on the wire so the remote step has to rebase it.
+      hold.on = true
+      keystroke()
+      rebases.push(remote(server.authority('default').version))
+      hold.on = false
+      for (const send of hold.held.splice(0)) send()
+      await tick()
+      // Past the typing merge window, so every keystroke is a fresh step.
+      await new Promise((r) => setTimeout(r, 0))
+    }
+    const step = median(steps)
+    const apply = median(applies)
+    const rebase = median(rebases)
 
     collab.destroy()
     const converged = el.innerHTML === server.authority('default').htmlAt()

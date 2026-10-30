@@ -100,10 +100,8 @@ function run(seed: number, steps: number): void {
       }
     }
     settle(net, clients)
-    const html = expectConverged(net, clients)
-    if (process.env.SIM_PROBE) console.log(seed, 'version', net.authority.version, 'clients', clients.length, html.slice(0, 160))
+    expectConverged(net, clients)
   } catch (e) {
-    if (process.env.SIM_PROBE) console.log((e as Error).stack)
     throw new Error(`seed ${seed} failed: ${(e as Error).message}\n${log.slice(-40).join('\n')}`, { cause: e })
   }
 }
