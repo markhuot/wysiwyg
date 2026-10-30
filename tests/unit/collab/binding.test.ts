@@ -177,6 +177,19 @@ describe('bind', () => {
     expect(b.collab.remoteCursors()).toEqual([])
   })
 
+  test("a client that hasn't edited yet places others' cursors", async () => {
+    const net = new Net('<p>abcd</p>')
+    const sizes = () => ({ version: 0, sizes: net.authority.sizesAt(0) })
+    const a = track(client(net))
+    const b = track(client(net, undefined, 0, { sizes, debug: false }))
+    settle(net, [a, b])
+    select(a, 0, 2)
+    a.root.ownerDocument.dispatchEvent(new Event('selectionchange'))
+    await Bun.sleep(30)
+    net.deliver()
+    expect(b.collab.remoteCursors().map((c) => c.to.offset)).toEqual([2])
+  })
+
   test('a form reset leaves the shared document alone', () => {
     const net = new Net('<p>ab</p>')
     const form = document.createElement('form')

@@ -39,6 +39,32 @@ test('createEditor on a few thousand blocks boots well under a millisecond', asy
   expect(average).toBeLessThan(0.1)
 })
 
+test('attaching the multiplayer binding keeps boot well under a millisecond', async ({ page }) => {
+  const average = await page.evaluate(() => {
+    const transport = { connect: () => ({ send() {}, close() {} }) }
+    const runs = 1000
+    const start = performance.now()
+    for (let i = 0; i < runs; i++) {
+      const editor = window.demo.createEditor(window.demo.a.root)
+      window.demo.bind(editor, { server: transport, online: false }).destroy()
+      editor.destroy()
+    }
+    return (performance.now() - start) / runs
+  })
+  expect(average).toBeLessThan(0.1)
+})
+
+test('the form posts both editors and reset restores them', async ({ page }) => {
+  await place(page, 'b', 0, 1)
+  await page.keyboard.type('Q')
+  await page.click('button[type=submit]')
+  const posted = await page.locator('[data-posted]').textContent()
+  expect(posted).toContain('body = <h1>A large document</h1>')
+  expect(posted).toContain('notes = <p>AQ second')
+  await page.click('button[type=reset]')
+  expect(await html(page, 'b')).not.toContain('AQ')
+})
+
 test('edits and undo in editor A leave editor B byte-identical', async ({ page }) => {
   const before = await html(page, 'b')
   await place(page, 'a', 0, 1)

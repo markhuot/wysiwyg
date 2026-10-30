@@ -12,7 +12,7 @@
       <p>Two editors on one page, each with its own schema and history. <kbd>⌘B</kbd> <kbd>⌘I</kbd> <kbd>⌘Z</kbd> <kbd>⇧⌘Z</kbd> <kbd>⇧↵</kbd></p>
     </header>
 
-    <main>
+    <form id="single" class="grid" method="post" action="/">
       <section class="card" data-editor="a">
         <div class="meta">
           <h2>Default schema <small>p · h1 · h2 · strong · em</small></h2>
@@ -20,7 +20,7 @@
           <span class="badge" data-size></span>
           <span class="badge" data-valid></span>
         </div>
-        <div id="editor-a" class="editor large" contenteditable="true"></div>
+        <div id="editor-a" class="editor large" contenteditable="true" name="body"></div>
         <details>
           <summary>innerHTML</summary>
           <pre data-html></pre>
@@ -34,13 +34,56 @@
           <span class="badge" data-size></span>
           <span class="badge" data-valid></span>
         </div>
-        <div id="editor-b" class="editor" contenteditable="true"><p>A second, independent editor. It only allows <strong>paragraphs</strong>, so Enter here never makes a heading.</p><p>Undo in one editor <em>never</em> touches the other.</p></div>
+        <div id="editor-b" class="editor" contenteditable="true" name="notes"><p>A second, independent editor. It only allows <strong>paragraphs</strong>, so Enter here never makes a heading.</p><p>Undo in one editor <em>never</em> touches the other.</p></div>
         <details open>
           <summary>innerHTML</summary>
           <pre data-html></pre>
         </details>
       </section>
-    </main>
+
+      <section class="card wide" data-form>
+        <div class="meta">
+          <h2>A plain form <small>the editors post as <code>body</code> and <code>notes</code>, like textareas</small></h2>
+          <button type="submit">Submit</button>
+          <button type="reset">Reset</button>
+        </div>
+        <pre data-posted>Submit to see what the form posts.</pre>
+      </section>
+    </form>
+
+    <section class="collab">
+      <header>
+        <h2>Collaborative</h2>
+        <p>
+          Two editors on one document, synced through the server in <code>serve.ts</code>. Open this page in a second tab to join.
+          <a data-older href="#">Open at an older version</a> to watch it catch up.
+        </p>
+      </header>
+      <div class="grid">
+        <section class="card" data-collab="c">
+          <div class="meta">
+            <h2>Ada</h2>
+            <label><input type="checkbox" data-online checked /> online</label>
+            <label>latency <select data-latency><option value="0">0 ms</option><option value="300">300 ms</option><option value="1500">1.5 s</option></select></label>
+            <span class="badge" data-status></span>
+            <span class="badge" data-sync></span>
+            <span class="badge" data-valid></span>
+          </div>
+          <div id="editor-c" class="editor" contenteditable="true"></div>
+        </section>
+        <section class="card" data-collab="d">
+          <div class="meta">
+            <h2>Grace</h2>
+            <label><input type="checkbox" data-online checked /> online</label>
+            <label>latency <select data-latency><option value="0">0 ms</option><option value="300">300 ms</option><option value="1500">1.5 s</option></select></label>
+            <span class="badge" data-status></span>
+            <span class="badge" data-sync></span>
+            <span class="badge" data-valid></span>
+          </div>
+          <div id="editor-d" class="editor" contenteditable="true"></div>
+        </section>
+      </div>
+    </section>
 
     <script type="module" src="./main.ts"></script>
   </body>

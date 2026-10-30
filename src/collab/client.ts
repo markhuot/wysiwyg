@@ -662,7 +662,7 @@ export class Collab extends EventTarget {
 
   /** A remote cursor at its version, mapped to the document as it is here. Null until we've caught up to it. */
   private resolvePresence(p: Presence): { anchor: Pos; head: Pos } | null {
-    if (!this.index) return null
+    this.ensureIndex()
     const current = this.htmlVersion()
     if (p.version > current || p.version < this.mapsBase) return null
     const mapping = new Mapping(this.maps.slice(p.version - this.mapsBase))
