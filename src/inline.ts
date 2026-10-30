@@ -104,23 +104,26 @@ export function marksAt(items: readonly Item[], offset: number): readonly string
   return after?.kind === 'text' ? after.marks : []
 }
 
+/** The canonical shape of a block's content: text, `BR` and marks holding their children. */
+export type Nested = string | { kind: 'br' } | { kind: 'mark'; mark: string; children: Nested[] }
+
 /**
- * Replaces the block's children with the canonical rendering of `items`:
- * marks nest in schema order, adjacent identical marks merge, empty marks
- * vanish and the placeholder `<br>` is added where the last line is empty.
+ * The canonical rendering of `items`: marks nest in schema order, adjacent
+ * identical marks merge and empty marks vanish. With `placeholder`, a `BR`
+ * is added where the last line is empty. Both the live DOM (`writeBlock`) and
+ * the multiplayer model's HTML come from this, so they can't drift.
  */
-export function writeBlock(block: Element, items: readonly Item[], schema: Schema): void {
-  const doc = block.ownerDocument
+export function nest(items: readonly Item[], schema: Schema, placeholder = false): Nested[] {
   const runs = items.filter((i) => i.kind === 'br' || i.text)
 
-  const render = (group: readonly Item[], depth: number): Node[] => {
-    const out: Node[] = []
+  const render = (group: readonly Item[], depth: number): Nested[] => {
+    const out: Nested[] = []
     if (depth === schema.marks.length) {
       let prev: Item | undefined
       for (const item of group) {
-        if (item.kind === 'br') out.push(doc.createElement('br'))
-        else if (prev?.kind === 'text') (out.at(-1) as Text).appendData(item.text)
-        else out.push(doc.createTextNode(item.text))
+        if (item.kind === 'br') out.push(item)
+        else if (prev?.kind === 'text') out[out.length - 1] += item.text
+        else out.push(item.text)
         prev = item
       }
       return out
@@ -131,19 +134,31 @@ export function writeBlock(block: Element, items: readonly Item[], schema: Schem
       let j = i + 1
       while (j < group.length && has(group[j]!) === has(group[i]!)) j++
       const part = group.slice(i, j)
-      if (has(group[i]!)) {
-        const el = doc.createElement(mark)
-        el.append(...render(part, depth + 1))
-        out.push(el)
-      } else {
-        out.push(...render(part, depth + 1))
-      }
+      if (has(group[i]!)) out.push({ kind: 'mark', mark, children: render(part, depth + 1) })
+      else out.push(...render(part, depth + 1))
       i = j
     }
     return out
   }
 
-  const nodes = render(runs, 0)
-  if (!runs.length || runs.at(-1)!.kind === 'br') nodes.push(doc.createElement('br'))
-  block.replaceChildren(...nodes)
+  const out = render(runs, 0)
+  if (placeholder && (!runs.length || runs.at(-1)!.kind === 'br')) out.push({ kind: 'br' })
+  return out
+}
+
+/**
+ * Replaces the block's children with the canonical rendering of `items`
+ * (see `nest`), including the placeholder `<br>` where the last line is empty.
+ */
+export function writeBlock(block: Element, items: readonly Item[], schema: Schema): void {
+  const doc = block.ownerDocument
+  const build = (nodes: readonly Nested[]): Node[] =>
+    nodes.map((n) => {
+      if (typeof n === 'string') return doc.createTextNode(n)
+      if (n.kind === 'br') return doc.createElement('br')
+      const el = doc.createElement(n.mark)
+      el.append(...build(n.children))
+      return el
+    })
+  block.replaceChildren(...build(nest(items, schema, true)))
 }
