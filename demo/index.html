@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>wysiwyg · zero-boot demo</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>wysiwyg</h1>
+      <p>Two editors on one page, each with its own schema and history. <kbd>⌘B</kbd> <kbd>⌘I</kbd> <kbd>⌘Z</kbd> <kbd>⇧⌘Z</kbd> <kbd>⇧↵</kbd></p>
+    </header>
+
+    <main>
+      <section class="card" data-editor="a">
+        <div class="meta">
+          <h2>Default schema <small>p · h1 · h2 · strong · em</small></h2>
+          <span class="badge" data-boot></span>
+          <span class="badge" data-size></span>
+          <span class="badge" data-valid></span>
+        </div>
+        <div id="editor-a" class="editor large" contenteditable="true"></div>
+        <details>
+          <summary>innerHTML</summary>
+          <pre data-html></pre>
+        </details>
+      </section>
+
+      <section class="card" data-editor="b">
+        <div class="meta">
+          <h2>Paragraph-only schema <small>p · strong · em</small></h2>
+          <span class="badge" data-boot></span>
+          <span class="badge" data-size></span>
+          <span class="badge" data-valid></span>
+        </div>
+        <div id="editor-b" class="editor" contenteditable="true"><p>A second, independent editor. It only allows <strong>paragraphs</strong>, so Enter here never makes a heading.</p><p>Undo in one editor <em>never</em> touches the other.</p></div>
+        <details open>
+          <summary>innerHTML</summary>
+          <pre data-html></pre>
+        </details>
+      </section>
+    </main>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
