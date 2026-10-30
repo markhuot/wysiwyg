@@ -1,7 +1,18 @@
 {
   "name": "wysiwyg",
+  "version": "0.1.0",
+  "description": "A contenteditable editor that enforces a strict schema with zero boot time",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/markhuot/wysiwyg.git"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./collab": "./src/collab/index.ts",
+    "./collab/server": "./src/collab/server.ts"
+  },
   "scripts": {
     "dev": "bun serve.ts",
     "test": "bun test",

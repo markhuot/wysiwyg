@@ -1,8 +1,28 @@
 # wysiwyg
 
+[![CI](https://github.com/markhuot/wysiwyg/actions/workflows/ci.yml/badge.svg)](https://github.com/markhuot/wysiwyg/actions/workflows/ci.yml)
+
 A `contenteditable` editor that enforces a strict schema with zero boot time.
 
 The stored format is HTML, and the DOM is the document. You start the field with valid markup, `contenteditable` included, and `createEditor` trusts it: it registers the element and does nothing else. It doesn't parse, walk, validate or write. Every edit is intercepted at `beforeinput` and applied by the editor's own commands, which keep the markup valid. The browser never gets to add `<b>`, `<span style>` or stray `<div>`s.
+
+## Installation
+
+The package isn't on npm. Install it from GitHub at a release tag:
+
+```sh
+bun add github:markhuot/wysiwyg#v0.1.0
+# or
+npm install github:markhuot/wysiwyg#v0.1.0
+```
+
+It has no runtime dependencies and ships its TypeScript source, with no build step. Bun runs it as is, and bundlers that compile TypeScript (Vite, esbuild, Bun's bundler) handle it like your own code. There are three entry points:
+
+```ts
+import { createEditor, defaultSchema, validate } from 'wysiwyg'
+import { bind } from 'wysiwyg/collab'                     // the multiplayer binding, in the browser
+import { Authority, CollabServer } from 'wysiwyg/collab/server' // the collaboration server, no DOM
+```
 
 ## Usage
 
@@ -16,7 +36,7 @@ The stored format is HTML, and the DOM is the document. You start the field with
 ```
 
 ```ts
-import { createEditor, defaultSchema } from './src'
+import { createEditor, defaultSchema } from 'wysiwyg'
 
 const editor = createEditor(document.getElementById('body')!, defaultSchema)
 editor.getHTML() // el.innerHTML, nothing serialized
@@ -59,11 +79,11 @@ Both a submit and `new FormData(form)` include it, through the form's `formdata`
 
 ## Multiplayer
 
-Multiplayer is optional and lives in its own entry point, `src/collab`. Without it the editor works exactly as above.
+Multiplayer is optional and lives in its own entry point, `wysiwyg/collab`. Without it the editor works exactly as above.
 
 ```ts
-import { createEditor } from './src'
-import { bind } from './src/collab'
+import { createEditor } from 'wysiwyg'
+import { bind } from 'wysiwyg/collab'
 
 const editor = createEditor(el)
 const collab = bind(editor, {
@@ -96,7 +116,7 @@ Turning a DOM caret into an integer position needs the size of every block befor
 
 ### The server
 
-`src/collab/server.ts` has the server, with no DOM and no dependencies. `Authority` holds one document: its starting HTML, every step since, and a model at the head version that validates each step against the schema. It can produce the HTML and size index for any version. `CollabServer` speaks the protocol over any socket library. `serve.ts` hosts it with Bun's WebSocket at `/collab`, and `/collab/doc?doc=…&version=…` returns a version's HTML, number and size index.
+`wysiwyg/collab/server` (`src/collab/server.ts`) has the server, with no DOM and no dependencies. `Authority` holds one document: its starting HTML, every step since, and a model at the head version that validates each step against the schema. It can produce the HTML and size index for any version. `CollabServer` speaks the protocol over any socket library. `serve.ts` hosts it with Bun's WebSocket at `/collab`, and `/collab/doc?doc=…&version=…` returns a version's HTML, number and size index.
 
 The protocol is JSON, and every message carries the format version `v: 1`:
 
