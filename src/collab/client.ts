@@ -44,6 +44,12 @@ interface Unconfirmed {
   step: Step
   inverse: Step[]
   time: number
+  /**
+   * Sent at least once. The server may have accepted it even if the
+   * connection dropped before saying so, so it never changes again (no
+   * typing merges into it) until it's confirmed or rebased.
+   */
+  sent: boolean
 }
 
 /** One undo entry: steps that revert a local change, in the order to apply them, mapped to the current document. */
@@ -326,7 +332,7 @@ export class Collab extends EventTarget {
     for (const { step, inverse } of steps) {
       const prev = this.unconfirmed.at(-1)
       const merged =
-        prev && this.unconfirmed.length > this.inflight && now - prev.time < MERGE_MS && prev.step instanceof ReplaceStep && prev.inverse.length === 1
+        prev && !prev.sent && now - prev.time < MERGE_MS && prev.step instanceof ReplaceStep && prev.inverse.length === 1
           ? prev.step.merge(step)
           : null
       if (merged) {
@@ -334,7 +340,7 @@ export class Collab extends EventTarget {
         prev!.inverse = [new ReplaceStep(merged.from, merged.from + sliceSize(merged.slice), (prev!.inverse[0] as ReplaceStep).slice)]
         prev!.time = now
       } else {
-        this.unconfirmed.push({ step, inverse, time: now })
+        this.unconfirmed.push({ step, inverse, time: now, sent: false })
       }
       this.shadowApply(step)
     }
@@ -423,6 +429,7 @@ export class Collab extends EventTarget {
     if (this.status !== 'online' || this.inflight || this.composing || !this.unconfirmed.length) return
     this.inflight = this.unconfirmed.length
     this.sentAt = this.htmlVersion()
+    for (const u of this.unconfirmed) u.sent = true
     this.post({ v: PROTOCOL, type: 'steps', version: this.sentAt, steps: this.unconfirmed.map((u) => u.step.toJSON()), clientId: this.clientId })
   }
 
@@ -506,7 +513,8 @@ export class Collab extends EventTarget {
     }
 
     let ours = 0
-    while (ours < clientIds.length && ours < this.inflight && clientIds[ours] === this.clientId) ours++
+    // Our steps can only be confirmed while sent, and the server puts an accepted batch right at the version it was sent at.
+    while (ours < clientIds.length && this.unconfirmed[ours]?.sent && clientIds[ours] === this.clientId) ours++
     for (const step of steps) this.maps.push(step.getMap())
     if (this.maps.length > PRESENCE_MAPS) {
       this.mapsBase += this.maps.length - PRESENCE_MAPS
@@ -573,7 +581,7 @@ export class Collab extends EventTarget {
       }
       this.shadowApply(mapped)
       mapping.appendMap(mapped.getMap(), mirror[i] ?? undefined)
-      rebased.push({ step: mapped, inverse, time: 0 })
+      rebased.push({ step: mapped, inverse, time: 0, sent: false })
     }
     this.unconfirmed = rebased
 
