@@ -124,6 +124,17 @@ test.describe('Backspace and Delete', () => {
     await expectDoc(page, '<h1>abX<strong>cd</strong></h1>')
   })
 
+  test('Enter then Backspace at the start of a heading gives the heading back', async ({ page }) => {
+    await mount(page, '<h1>Title</h1>')
+    await select(page, 0, 0)
+    await page.keyboard.press('Enter')
+    await expectDoc(page, '<p><br></p><h1>Title</h1>')
+    await page.keyboard.press('Backspace')
+    await expectDoc(page, '<h1>Title</h1>')
+    await page.keyboard.type('X')
+    await expectDoc(page, '<h1>XTitle</h1>')
+  })
+
   test('Delete at a block end joins the next block', async ({ page }) => {
     await mount(page, '<p>ab</p><p>cd</p>')
     await select(page, 0, 2)

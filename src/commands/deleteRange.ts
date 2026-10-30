@@ -1,11 +1,21 @@
-import { contentLength, type Pos } from '../dom'
+import { blocksBetween, contentLength, ordered, type Pos } from '../dom'
 import { readBlock, textOf } from '../inline'
 import { replaceRange, type Ctx } from './replaceRange'
 
 export type DeleteUnit = 'char' | 'word' | 'line'
 
-/** Deletes between two positions. Across blocks, the end block joins the start block and takes its tag. */
-export function deleteRange(ctx: Ctx, from: Pos, to: Pos): Pos {
+/**
+ * Deletes between two positions. Across blocks, the end block joins the start
+ * block and takes its tag, unless the start block is empty: then the empty
+ * block goes and the end block keeps its tag, so Backspace into (or Delete
+ * from) an empty `p` doesn't demote a heading.
+ */
+export function deleteRange(ctx: Ctx, a: Pos, b: Pos): Pos {
+  const [from, to] = ordered(a, b)
+  if (from.block !== to.block && contentLength(from.block) === 0) {
+    for (const block of blocksBetween(from.block, to.block).slice(0, -1)) block.remove()
+    return replaceRange(ctx, { block: to.block, offset: 0 }, to, () => [[]])
+  }
   return replaceRange(ctx, from, to, () => [[]])
 }
 

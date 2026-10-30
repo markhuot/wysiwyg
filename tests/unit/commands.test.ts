@@ -69,6 +69,22 @@ describe('deleteRange and joins', () => {
     expectDoc(ctx, '<p>abcd</p>')
   })
 
+  test('backspace into an empty paragraph removes it and keeps the heading', () => {
+    const ctx = doc('<p><br></p><h1>ab</h1>')
+    const prev = stepBackward(ctx, at(ctx, 1, 0), 'char')!
+    const pos = deleteRange(ctx, prev, at(ctx, 1, 0))
+    expectDoc(ctx, '<h1>ab</h1>')
+    expect(pos).toEqual(at(ctx, 0, 0))
+  })
+
+  test('delete forward from an empty paragraph removes it and keeps the heading', () => {
+    const ctx = doc('<h2>x</h2><p><br></p><h1>ab</h1>')
+    const next = stepForward(ctx, at(ctx, 1, 0), 'char')!
+    const pos = deleteRange(ctx, at(ctx, 1, 0), next)
+    expectDoc(ctx, '<h2>x</h2><h1>ab</h1>')
+    expect(pos).toEqual(at(ctx, 1, 0))
+  })
+
   test('a range across three blocks with mixed marks', () => {
     const ctx = doc('<h1>a<strong>bc</strong></h1><p>mid</p><p><em>de</em>f</p>')
     const pos = deleteRange(ctx, at(ctx, 0, 2), at(ctx, 2, 1))
